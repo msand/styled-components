@@ -1,18 +1,23 @@
 // @flow
 import React from 'react';
 import TestRenderer from 'react-test-renderer';
+import stylisRTLPlugin from 'stylis-plugin-rtl';
 
 import css from '../css';
 import keyframes from '../keyframes';
 import Keyframes from '../../models/Keyframes';
-import { expectCSSMatches, getCSS, resetStyled } from '../../test/utils';
+import StyleSheetManager from '../../models/StyleSheetManager';
+import { getRenderedCSS, resetStyled } from '../../test/utils';
 
-/**
- * Setup
- */
+// Disable isStaticRules optimisation since we're not
+// testing for ComponentStyle specifics here
+jest.mock('../../utils/isStaticRules', () => () => false);
+
+let styled;
+
 describe('keyframes', () => {
   beforeEach(() => {
-    resetStyled();
+    styled = resetStyled();
   });
 
   it('should return Keyframes instance', () => {
@@ -36,12 +41,10 @@ describe('keyframes', () => {
         opacity: 1;
       }
     `.getName()
-    ).toMatchInlineSnapshot('"bcCCNc"');
+    ).toMatchInlineSnapshot(`"jgzmJZ"`);
   });
 
   it('should insert the correct styles', () => {
-    const styled = resetStyled();
-
     const rules = `
       0% {
         opacity: 0;
@@ -52,44 +55,39 @@ describe('keyframes', () => {
     `;
 
     const animation = keyframes`${rules}`;
-    const name = animation.getName();
 
-    expectCSSMatches('');
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`""`);
 
     const Comp = styled.div`
       animation: ${animation} 2s linear infinite;
     `;
     TestRenderer.create(<Comp />);
 
-    expectCSSMatches(`
-      .b {
-        -webkit-animation: ${name} 2s linear infinite;
-        animation: ${name} 2s linear infinite;
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      ".a {
+        -webkit-animation: jgzmJZ 2s linear infinite;
+        animation: jgzmJZ 2s linear infinite;
       }
-
-      @-webkit-keyframes ${name} {
+      @-webkit-keyframes jgzmJZ {
         0% {
-          opacity:0;
+          opacity: 0;
         }
         100% {
-          opacity:1;
+          opacity: 1;
         }
       }
-
-      @keyframes ${name} {
+      @keyframes jgzmJZ {
         0% {
-          opacity:0;
+          opacity: 0;
         }
         100% {
-          opacity:1;
+          opacity: 1;
         }
-      }
+      }"
     `);
   });
 
   it('should insert the correct styles when keyframes in props', () => {
-    const styled = resetStyled();
-
     const rules = `
       0% {
         opacity: 0;
@@ -100,44 +98,39 @@ describe('keyframes', () => {
     `;
 
     const animation = keyframes`${rules}`;
-    const name = animation.getName();
 
-    expectCSSMatches('');
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`""`);
 
     const Comp = styled.div`
       animation: ${props => props.animation} 2s linear infinite;
     `;
     TestRenderer.create(<Comp animation={animation} />);
 
-    expectCSSMatches(`
-      .b {
-        -webkit-animation: ${name} 2s linear infinite;
-        animation: ${name} 2s linear infinite;
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      ".a {
+        -webkit-animation: jgzmJZ 2s linear infinite;
+        animation: jgzmJZ 2s linear infinite;
       }
-
-      @-webkit-keyframes ${name} {
+      @-webkit-keyframes jgzmJZ {
         0% {
-          opacity:0;
+          opacity: 0;
         }
         100% {
-          opacity:1;
+          opacity: 1;
         }
       }
-
-      @keyframes ${name} {
+      @keyframes jgzmJZ {
         0% {
-          opacity:0;
+          opacity: 0;
         }
         100% {
-          opacity:1;
+          opacity: 1;
         }
-      }
+      }"
     `);
   });
 
   it('should handle interpolations', () => {
-    const styled = resetStyled();
-
     const opacity = ['opacity: 0;', 'opacity: 1;'];
 
     const opacityAnimation = keyframes`
@@ -166,7 +159,7 @@ describe('keyframes', () => {
         );
       } else {
         return css`
-          ${animation === 'slide' ? slideAnimation : opacityAnimation} 1s linear;
+          ${animation === 'slide' ? slideAnimation : opacityAnimation} 1s linear
         `;
       }
     };
@@ -186,21 +179,190 @@ describe('keyframes', () => {
 
     TestRenderer.create(<App />);
 
-    expect(getCSS(document).trim()).toMatchInlineSnapshot(`
-"/* sc-component-id:sc-a */
-.b{-webkit-animation:none;animation:none;}.c{-webkit-animation:hNeMbn 1s linear;animation:hNeMbn 1s linear;, dHUfhi 1s linear;}.d{-webkit-animation:dHUfhi 1s linear;animation:dHUfhi 1s linear;}.e{-webkit-animation:hNeMbn 1s linear;animation:hNeMbn 1s linear;}
-/* sc-component-id:sc-keyframes-hNeMbn */
-@-webkit-keyframes hNeMbn{from{-webkit-transform:translateX(-10px);-ms-transform:translateX(-10px);transform:translateX(-10px);}to{-webkit-transform:none;-ms-transform:none;transform:none;}} @keyframes hNeMbn{from{-webkit-transform:translateX(-10px);-ms-transform:translateX(-10px);transform:translateX(-10px);}to{-webkit-transform:none;-ms-transform:none;transform:none;}}
-/* sc-component-id:sc-keyframes-dHUfhi */
-@-webkit-keyframes dHUfhi{from{opacity:0;}to{opacity:1;}} @keyframes dHUfhi{from{opacity:0;}to{opacity:1;}}"
-`);
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      ".a {
+        -webkit-animation: none;
+        animation: none;
+      }
+      .b {
+        -webkit-animation: cMaiLV 1s linear, itcuFx 1s linear;
+        animation: cMaiLV 1s linear, itcuFx 1s linear;
+      }
+      .c {
+        -webkit-animation: itcuFx 1s linear;
+        animation: itcuFx 1s linear;
+      }
+      .d {
+        -webkit-animation: cMaiLV 1s linear;
+        animation: cMaiLV 1s linear;
+      }
+      @-webkit-keyframes cMaiLV {
+        from {
+          -webkit-transform: translateX(-10px);
+          -moz-transform: translateX(-10px);
+          -ms-transform: translateX(-10px);
+          transform: translateX(-10px);
+        }
+        to {
+          -webkit-transform: none;
+          -moz-transform: none;
+          -ms-transform: none;
+          transform: none;
+        }
+      }
+      @keyframes cMaiLV {
+        from {
+          -webkit-transform: translateX(-10px);
+          -moz-transform: translateX(-10px);
+          -ms-transform: translateX(-10px);
+          transform: translateX(-10px);
+        }
+        to {
+          -webkit-transform: none;
+          -moz-transform: none;
+          -ms-transform: none;
+          transform: none;
+        }
+      }
+      @-webkit-keyframes itcuFx {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes itcuFx {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }"
+    `);
   });
 
   it('should throw an error when interpolated in a vanilla string', () => {
-    const styled = resetStyled();
-
     const animation = keyframes``;
 
     expect(() => `animation-name: ${animation};`).toThrow();
+  });
+
+  it('should use the local stylis instance', () => {
+    const rules = `
+      0% {
+        left: 0%;
+      }
+      100% {
+        left: 100%;
+      }
+    `;
+
+    const animation = keyframes`${rules}`;
+
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`""`);
+
+    const Comp = styled.div`
+      animation: ${animation} 2s linear infinite;
+    `;
+    TestRenderer.create(
+      <StyleSheetManager stylisPlugins={[stylisRTLPlugin]}>
+        <Comp />
+      </StyleSheetManager>
+    );
+
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      ".a {
+        -webkit-animation: dpYZkx-1567285458 2s linear infinite;
+        animation: dpYZkx-1567285458 2s linear infinite;
+      }
+      @-webkit-keyframes dpYZkx-1567285458 {
+        0% {
+          right: 0%;
+        }
+        100% {
+          right: 100%;
+        }
+      }
+      @keyframes dpYZkx-1567285458 {
+        0% {
+          right: 0%;
+        }
+        100% {
+          right: 100%;
+        }
+      }"
+    `);
+  });
+
+  it('should reinject if used in different stylis contexts', () => {
+    const rules = `
+      0% {
+        left: 0%;
+      }
+      100% {
+        left: 100%;
+      }
+    `;
+
+    const animation = keyframes`${rules}`;
+
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`""`);
+
+    const Comp = styled.div`
+      animation: ${animation} 2s linear infinite;
+    `;
+    TestRenderer.create(
+      <>
+        <Comp />
+        <StyleSheetManager stylisPlugins={[stylisRTLPlugin]}>
+          <Comp />
+        </StyleSheetManager>
+      </>
+    );
+
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      ".a {
+        -webkit-animation: dpYZkx 2s linear infinite;
+        animation: dpYZkx 2s linear infinite;
+      }
+      .b {
+        -webkit-animation: dpYZkx-1567285458 2s linear infinite;
+        animation: dpYZkx-1567285458 2s linear infinite;
+      }
+      @-webkit-keyframes dpYZkx {
+        0% {
+          left: 0%;
+        }
+        100% {
+          left: 100%;
+        }
+      }
+      @keyframes dpYZkx {
+        0% {
+          left: 0%;
+        }
+        100% {
+          left: 100%;
+        }
+      }
+      @-webkit-keyframes dpYZkx-1567285458 {
+        0% {
+          right: 0%;
+        }
+        100% {
+          right: 100%;
+        }
+      }
+      @keyframes dpYZkx-1567285458 {
+        0% {
+          right: 0%;
+        }
+        100% {
+          right: 100%;
+        }
+      }"
+    `);
   });
 });

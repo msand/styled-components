@@ -37,13 +37,18 @@ describe('flatten', () => {
       WebkitFilter: 'blur(2px)',
       fontWeight: 500,
     };
-    const css = 'font-size: 14px; line-height: 15px; -webkit-filter: blur(2px); font-weight: 500;';
+    const css = [
+      'font-size: 14px;',
+      'line-height: 15px;',
+      '-webkit-filter: blur(2px);',
+      'font-weight: 500;'
+    ];
     // $FlowFixMe
-    expect(flatten([obj])).toEqual([css]);
+    expect(flatten([obj])).toEqual(css);
     // $FlowFixMe
     expect(flatten(['some:thing;', obj, 'something: else;'])).toEqual([
       'some:thing;',
-      css,
+      ...css,
       'something: else;',
     ]);
   });
@@ -58,14 +63,21 @@ describe('flatten', () => {
         fontWeight: 'bold',
       },
     };
-    const css =
-      'font-size: 14px; @media screen and (min-width: 250px) {\n  font-size: 16px;\n} &:hover {\n  font-weight: bold;\n}';
+    const css = [
+      'font-size: 14px;',
+      '@media screen and (min-width: 250px) {',
+      'font-size: 16px;',
+      '}',
+      '&:hover {',
+      'font-weight: bold;',
+      '}'
+    ];
     // $FlowFixMe
-    expect(flatten([obj])).toEqual([css]);
+    expect(flatten([obj])).toEqual(css);
     // $FlowFixMe
     expect(flatten(['some:thing;', obj, 'something: else;'])).toEqual([
       'some:thing;',
-      css,
+      ...css,
       'something: else;',
     ]);
   });
@@ -117,6 +129,7 @@ describe('flatten', () => {
   });
 
   it('throws if trying to interpolate a normal React component', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
     const Foo = ({ className }) => <div className={className}>hello there!</div>;
 
     const Bar = styled.div`
@@ -125,13 +138,15 @@ describe('flatten', () => {
       };
     `;
 
-    expect(() => TestRenderer.create(<Bar />)).toThrowErrorMatchingInlineSnapshot(
+    TestRenderer.create(<Bar />);
+
+    expect(console.error.mock.calls[0][0]).toMatchInlineSnapshot(
       `"Foo is not a styled component and cannot be referred to via component selector. See https://www.styled-components.com/docs/advanced#referring-to-other-components for more details."`
     );
   });
 
-  it('does not warn for regular functions', () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
+  it('does not error for regular functions', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
 
     const SvgIcon = styled.svg`
       vertical-align: middle;
@@ -149,6 +164,6 @@ describe('flatten', () => {
       )
     ).not.toThrowError();
 
-    expect(console.warn).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
   });
 });

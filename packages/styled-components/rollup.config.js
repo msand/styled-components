@@ -9,9 +9,10 @@ import { terser } from 'rollup-plugin-terser';
 import sourceMaps from 'rollup-plugin-sourcemaps';
 import pkg from './package.json';
 
-// rollup-plugin-ignore stopped working, so we'll just remove the import lines 😐
-const propTypeIgnore = { "import PropTypes from 'prop-types';": "'';" };
-const streamIgnore = { "import stream from 'stream';": "'';" };
+/**
+ * NODE_ENV explicit replacement is only needed for standalone packages, as webpack
+ * automatically will replace it otherwise in the downstream build.
+ */
 
 const cjs = {
   exports: 'named',
@@ -36,13 +37,13 @@ const commonPlugins = [
   json(),
   nodeResolve(),
   babel({
+    configFile: require.resolve('../../babel.config.js'),
     exclude: ['node_modules/**', '../../node_modules/**'],
-    plugins: ['external-helpers'],
   }),
   commonjs({
     ignoreGlobal: true,
     namedExports: {
-      'react-is': ['isElement', 'isValidElementType', 'ForwardRef'],
+      'react-is': ['isElement', 'isValidElementType', 'ForwardRef', 'typeof'],
     },
   }),
   replace({
@@ -50,15 +51,13 @@ const commonPlugins = [
   }),
 ];
 
-const prodPlugins = [
-  replace({
-    ...propTypeIgnore,
-    'process.env.NODE_ENV': JSON.stringify('production'),
-  }),
-  terser({
-    sourcemap: true,
-  }),
-];
+// this should always be last
+const minifierPlugin = terser({
+  compress: {
+    passes: 2,
+  },
+  sourcemap: true,
+});
 
 const configBase = {
   input: './src/index.js',
@@ -68,7 +67,7 @@ const configBase = {
   plugins: commonPlugins,
 };
 
-const globals = { react: 'React', 'react-dom': 'ReactDOM' };
+const globals = { react: 'React', 'react-dom': 'ReactDOM', 'react-is': 'ReactIs' };
 
 const standaloneBaseConfig = {
   ...configBase,
@@ -83,7 +82,6 @@ const standaloneBaseConfig = {
   external: Object.keys(globals),
   plugins: configBase.plugins.concat(
     replace({
-      ...streamIgnore,
       __SERVER__: JSON.stringify(false),
     })
   ),
@@ -94,7 +92,8 @@ const standaloneConfig = {
   plugins: standaloneBaseConfig.plugins.concat(
     replace({
       'process.env.NODE_ENV': JSON.stringify('development'),
-    })
+    }),
+    minifierPlugin
   ),
 };
 
@@ -104,7 +103,12 @@ const standaloneProdConfig = {
     ...standaloneBaseConfig.output,
     file: 'dist/styled-components.min.js',
   },
-  plugins: standaloneBaseConfig.plugins.concat(prodPlugins),
+  plugins: standaloneBaseConfig.plugins.concat(
+    replace({
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    }),
+    minifierPlugin
+  ),
 };
 
 const serverConfig = {
@@ -115,8 +119,10 @@ const serverConfig = {
   ],
   plugins: configBase.plugins.concat(
     replace({
+      window: undefined,
       __SERVER__: JSON.stringify(true),
-    })
+    }),
+    minifierPlugin
   ),
 };
 
@@ -128,9 +134,9 @@ const browserConfig = {
   ],
   plugins: configBase.plugins.concat(
     replace({
-      ...streamIgnore,
       __SERVER__: JSON.stringify(false),
-    })
+    }),
+    minifierPlugin
   ),
 };
 
@@ -169,6 +175,12 @@ const macroConfig = Object.assign({}, configBase, {
     getESM({ file: 'dist/styled-components-macro.esm.js' }),
     getCJS({ file: 'dist/styled-components-macro.cjs.js' }),
   ],
+  plugins: configBase.plugins.concat(
+    replace({
+      __SERVER__: JSON.stringify(false),
+    }),
+    minifierPlugin
+  ),
 });
 
 export default [

@@ -1,253 +1,231 @@
 // @flow
-import React, { createElement, Component } from 'react';
+import hoist from 'hoist-non-react-statics';
+import React, { createElement, useContext, type Ref } from 'react';
+import type {
+  Attrs,
+  IInlineStyle,
+  IStyledNativeComponent,
+  IStyledNativeStatics,
+  RuleSet,
+  ShouldForwardProp,
+  Target,
+} from '../types';
 import determineTheme from '../utils/determineTheme';
 import { EMPTY_ARRAY, EMPTY_OBJECT } from '../utils/empties';
+import generateComponentId from '../utils/generateComponentId';
 import generateDisplayName from '../utils/generateDisplayName';
-import hoist from '../utils/hoist';
+import getComponentName from '../utils/getComponentName';
 import isFunction from '../utils/isFunction';
-import isTag from '../utils/isTag';
-import isDerivedReactComponent from '../utils/isDerivedReactComponent';
 import isStyledComponent from '../utils/isStyledComponent';
-import once from '../utils/once';
-import { ThemeConsumer } from './ThemeProvider';
+import merge from '../utils/mixinDeep';
+import { ThemeContext } from './ThemeProvider';
 
-import type { Theme } from './ThemeProvider';
-import type { Attrs, RuleSet, Target } from '../types';
+const identifiers = {};
 
-// $FlowFixMe
-class StyledNativeComponent extends Component<*, *> {
-  root: ?Object;
+/* We depend on components having unique IDs */
+function generateId(displayName?: string, parentComponentId?: string) {
+  const name = typeof displayName !== 'string' ? 'sc' : escape(displayName);
+  // Ensure that no displayName can lead to duplicate componentIds
+  identifiers[name] = (identifiers[name] || 0) + 1;
 
-  warnInnerRef: Function;
-
-  warnAttrsFnObjectKeyDeprecated: Function;
-
-  warnNonStyledComponentAttrsObjectKey: Function;
-
-  attrs = {};
-
-  constructor(props) {
-    super(props);
-
-    if (process.env.NODE_ENV !== 'production') {
-      this.warnInnerRef = once(displayName =>
-        // eslint-disable-next-line no-console
-        console.warn(
-          `The "innerRef" API has been removed in styled-components v4 in favor of React 16 ref forwarding, use "ref" instead like a typical component. "innerRef" was detected on component "${displayName}".`
-        )
-      );
-
-      this.warnAttrsFnObjectKeyDeprecated = once(
-        (key, displayName): void =>
-          // eslint-disable-next-line no-console
-          console.warn(
-            `Functions as object-form attrs({}) keys are now deprecated and will be removed in a future version of styled-components. Switch to the new attrs(props => ({})) syntax instead for easier and more powerful composition. The attrs key in question is "${key}" on component "${displayName}".`
-          )
-      );
-
-      this.warnNonStyledComponentAttrsObjectKey = once(
-        (key, displayName): void =>
-          // eslint-disable-next-line no-console
-          console.warn(
-            `It looks like you've used a non styled-component as the value for the "${key}" prop in an object-form attrs constructor of "${displayName}".\n` +
-              'You should use the new function-form attrs constructor which avoids this issue: attrs(props => ({ yourStuff }))\n' +
-              "To continue using the deprecated object syntax, you'll need to wrap your component prop in a function to make it available inside the styled component (you'll still get the deprecation warning though.)\n" +
-              `For example, { ${key}: () => InnerComponent } instead of { ${key}: InnerComponent }`
-          )
-      );
-    }
-  }
-
-  render() {
-    return (
-      <ThemeConsumer>
-        {(theme?: Theme) => {
-          const {
-            as: renderAs,
-            forwardedComponent,
-            forwardedRef,
-            innerRef,
-            style = [],
-            ...props
-          } = this.props;
-
-          const { defaultProps, displayName, target } = forwardedComponent;
-
-          let generatedStyles;
-          if (theme !== undefined) {
-            const themeProp = determineTheme(this.props, theme, defaultProps);
-            generatedStyles = this.generateAndInjectStyles(themeProp, this.props);
-          } else {
-            generatedStyles = this.generateAndInjectStyles(theme || EMPTY_OBJECT, this.props);
-          }
-
-          const propsForElement = {
-            ...this.attrs,
-            ...props,
-            style: [generatedStyles].concat(style),
-          };
-
-          if (forwardedRef) propsForElement.ref = forwardedRef;
-
-          if (process.env.NODE_ENV !== 'production' && innerRef) {
-            this.warnInnerRef(displayName);
-          }
-
-          return createElement(renderAs || target, propsForElement);
-        }}
-      </ThemeConsumer>
-    );
-  }
-
-  buildExecutionContext(theme: ?Object, props: Object, attrs: Attrs) {
-    const context = { ...props, theme };
-
-    if (!attrs.length) return context;
-
-    this.attrs = {};
-
-    attrs.forEach(attrDef => {
-      let resolvedAttrDef = attrDef;
-      let attrDefWasFn = false;
-      let attr;
-      let key;
-
-      if (isFunction(resolvedAttrDef)) {
-        // $FlowFixMe
-        resolvedAttrDef = resolvedAttrDef(context);
-        attrDefWasFn = true;
-      }
-
-      /* eslint-disable guard-for-in */
-      // $FlowFixMe
-      for (key in resolvedAttrDef) {
-        attr = resolvedAttrDef[key];
-
-        if (!attrDefWasFn) {
-          if (isFunction(attr) && !isDerivedReactComponent(attr) && !isStyledComponent(attr)) {
-            if (process.env.NODE_ENV !== 'production') {
-              this.warnAttrsFnObjectKeyDeprecated(key, this.props.forwardedComponent.displayName);
-            }
-
-            attr = attr(context);
-
-            if (process.env.NODE_ENV !== 'production' && React.isValidElement(attr)) {
-              this.warnNonStyledComponentAttrsObjectKey(
-                key,
-                this.props.forwardedComponent.displayName
-              );
-            }
-          }
-        }
-
-        this.attrs[key] = attr;
-        context[key] = attr;
-      }
-      /* eslint-enable */
-    });
-
-    return context;
-  }
-
-  generateAndInjectStyles(theme: any, props: any) {
-    const { inlineStyle } = props.forwardedComponent;
-
-    const executionContext = this.buildExecutionContext(
-      theme,
-      props,
-      props.forwardedComponent.attrs
-    );
-
-    return inlineStyle.generateStyleObject(executionContext);
-  }
-
-  setNativeProps(nativeProps: Object) {
-    if (this.root !== undefined) {
-      // $FlowFixMe
-      this.root.setNativeProps(nativeProps);
-    } else if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
-      console.warn(
-        'setNativeProps was called on a Styled Component wrapping a stateless functional component.'
-      );
-    }
-  }
+  const componentId = `${name}-${generateComponentId(name + identifiers[name])}`;
+  return parentComponentId ? `${parentComponentId}-${componentId}` : componentId;
 }
 
-export default (InlineStyle: Function) => {
-  const createStyledNativeComponent = (target: Target, options: Object, rules: RuleSet) => {
-    const {
-      attrs = EMPTY_ARRAY,
-      displayName = generateDisplayName(target),
-      ParentComponent = StyledNativeComponent,
-    } = options;
+function useResolvedAttrs<Config>(theme: any = EMPTY_OBJECT, props: Config, attrs: Attrs) {
+  // NOTE: can't memoize this
+  // returns [context, resolvedAttrs]
+  // where resolvedAttrs is only the things injected by the attrs themselves
+  const context = { ...props, theme };
+  const resolvedAttrs = {};
 
-    const isClass = !isTag(target);
+  attrs.forEach(attrDef => {
+    let resolvedAttrDef = attrDef;
+    let key;
+
+    if (isFunction(resolvedAttrDef)) {
+      resolvedAttrDef = resolvedAttrDef(context);
+    }
+
+    /* eslint-disable guard-for-in */
+    for (key in resolvedAttrDef) {
+      context[key] = resolvedAttrs[key] = resolvedAttrDef[key];
+    }
+    /* eslint-enable guard-for-in */
+  });
+
+  return [context, resolvedAttrs];
+}
+
+// Validator defaults to true if not in HTML/DOM env
+const validAttr = () => true;
+
+function useStyledComponentImpl(
+  forwardedComponent: IStyledNativeComponent,
+  props: Object,
+  forwardedRef: Ref<any>
+) {
+  const {
+    attrs: componentAttrs,
+    inlineStyle,
+    defaultProps,
+    shouldForwardProp,
+    target,
+  } = forwardedComponent;
+
+  // NOTE: the non-hooks version only subscribes to this when !componentStyle.isStatic,
+  // but that'd be against the rules-of-hooks. We could be naughty and do it anyway as it
+  // should be an immutable value, but behave for now.
+  const theme = determineTheme(props, useContext(ThemeContext), defaultProps);
+
+  const [context, attrs] = useResolvedAttrs(theme || EMPTY_OBJECT, props, componentAttrs);
+
+  const generatedStyles = inlineStyle.generateStyleObject(context);
+
+  const refToForward = forwardedRef;
+
+  const elementToBeCreated: Target = attrs.$as || props.$as || attrs.as || props.as || target;
+
+  const computedProps = attrs !== props ? { ...props, ...attrs } : props;
+  const propsForElement = {};
+
+  // eslint-disable-next-line guard-for-in
+  for (const key in computedProps) {
+    if (key[0] === '$' || key === 'as') continue;
+    else if (key === 'forwardedAs') {
+      propsForElement.as = computedProps[key];
+    } else if (!shouldForwardProp || shouldForwardProp(key, validAttr)) {
+      propsForElement[key] = computedProps[key];
+    }
+  }
+
+  propsForElement.style = [generatedStyles].concat(props.style || []);
+
+  propsForElement.ref = refToForward;
+
+  return createElement(elementToBeCreated, propsForElement);
+}
+
+export default (InlineStyle: Class<IInlineStyle>) => {
+  const createStyledNativeComponent = (
+    target: $PropertyType<IStyledNativeComponent, 'target'>,
+    options: {
+      attrs?: Attrs,
+      componentId: string,
+      displayName?: string,
+      parentComponentId?: string,
+      shouldForwardProp?: ShouldForwardProp,
+    },
+    rules: RuleSet
+  ) => {
     const isTargetStyledComp = isStyledComponent(target);
 
-    const WrappedStyledNativeComponent = React.forwardRef((props, ref) => (
-      <ParentComponent
-        {...props}
-        forwardedComponent={WrappedStyledNativeComponent}
-        forwardedRef={ref}
-      />
-    ));
+    const {
+      displayName = generateDisplayName(target),
+      componentId = generateId(options.displayName, options.parentComponentId),
+      attrs = EMPTY_ARRAY,
+    } = options;
 
+    const styledComponentId =
+      options.displayName && options.componentId
+        ? `${escape(options.displayName)}-${options.componentId}`
+        : options.componentId || componentId;
+
+    // fold the underlying StyledComponent attrs up (implicit extend)
     const finalAttrs =
-      // $FlowFixMe
-      isTargetStyledComp && target.attrs
-        ? Array.prototype.concat(target.attrs, attrs).filter(Boolean)
+      isTargetStyledComp && ((target: any): IStyledNativeComponent).attrs
+        ? ((target: any): IStyledNativeComponent).attrs.concat(attrs).filter(Boolean)
         : attrs;
+
+    // eslint-disable-next-line prefer-destructuring
+    let shouldForwardProp = options.shouldForwardProp;
+
+    if (isTargetStyledComp && target.shouldForwardProp) {
+      if (options.shouldForwardProp) {
+        // compose nested shouldForwardProp calls
+        shouldForwardProp = (prop, filterFn) =>
+          ((((target: any): IStyledNativeComponent).shouldForwardProp: any): ShouldForwardProp)(
+            prop,
+            filterFn
+          ) && ((options.shouldForwardProp: any): ShouldForwardProp)(prop, filterFn);
+      } else {
+        // eslint-disable-next-line prefer-destructuring
+        shouldForwardProp = ((target: any): IStyledNativeComponent).shouldForwardProp;
+      }
+    }
 
     /**
      * forwardRef creates a new interim component, which we'll take advantage of
      * instead of extending ParentComponent to create _another_ interim class
      */
+    let WrappedStyledComponent: IStyledNativeComponent;
 
-    // $FlowFixMe
-    WrappedStyledNativeComponent.attrs = finalAttrs;
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const forwardRef = (props, ref) => useStyledComponentImpl(WrappedStyledComponent, props, ref);
 
-    WrappedStyledNativeComponent.displayName = displayName;
+    forwardRef.displayName = displayName;
 
-    // $FlowFixMe
-    WrappedStyledNativeComponent.inlineStyle = new InlineStyle(
-      // $FlowFixMe
-      isTargetStyledComp ? target.inlineStyle.rules.concat(rules) : rules
+    WrappedStyledComponent = ((React.forwardRef(forwardRef): any): IStyledNativeComponent);
+
+    WrappedStyledComponent.attrs = finalAttrs;
+    WrappedStyledComponent.inlineStyle = new InlineStyle(
+      isTargetStyledComp
+        ? ((target: any): IStyledNativeComponent).inlineStyle.rules.concat(rules)
+        : rules
     );
+    WrappedStyledComponent.displayName = displayName;
+    WrappedStyledComponent.shouldForwardProp = shouldForwardProp;
 
-    // $FlowFixMe
-    WrappedStyledNativeComponent.styledComponentId = 'StyledNativeComponent';
-    // $FlowFixMe
-    WrappedStyledNativeComponent.target = isTargetStyledComp
-      ? // $FlowFixMe
-        target.target
+    WrappedStyledComponent.styledComponentId = styledComponentId;
+
+    // fold the underlying StyledComponent target up since we folded the styles
+    WrappedStyledComponent.target = isTargetStyledComp
+      ? ((target: any): IStyledNativeComponent).target
       : target;
-    // $FlowFixMe
-    WrappedStyledNativeComponent.withComponent = function withComponent(tag: Target) {
-      const { displayName: _, componentId: __, ...optionsToCopy } = options;
+
+    WrappedStyledComponent.withComponent = function withComponent(tag: Target) {
+      const { componentId: previousComponentId, ...optionsToCopy } = options;
+
+      const newComponentId =
+        previousComponentId && `${previousComponentId}-${escape(getComponentName(tag))}`;
+
       const newOptions = {
         ...optionsToCopy,
         attrs: finalAttrs,
-        ParentComponent,
+        componentId: newComponentId,
       };
 
       return createStyledNativeComponent(tag, newOptions, rules);
     };
 
-    if (isClass) {
-      // $FlowFixMe
-      hoist(WrappedStyledNativeComponent, target, {
-        // all SC-specific things should not be hoisted
-        attrs: true,
-        displayName: true,
-        inlineStyle: true,
-        styledComponentId: true,
-        target: true,
-        withComponent: true,
-      });
-    }
+    Object.defineProperty(WrappedStyledComponent, 'defaultProps', {
+      get() {
+        return this._foldedDefaultProps;
+      },
 
-    return WrappedStyledNativeComponent;
+      set(obj) {
+        this._foldedDefaultProps = isTargetStyledComp
+          ? merge({}, ((target: any): IStyledNativeComponent).defaultProps, obj)
+          : obj;
+      },
+    });
+
+    hoist<
+      IStyledNativeStatics,
+      $PropertyType<IStyledNativeComponent, 'target'>,
+      { [key: $Keys<IStyledNativeStatics>]: true }
+    >(WrappedStyledComponent, ((target: any): $PropertyType<IStyledNativeComponent, 'target'>), {
+      // all SC-specific things should not be hoisted
+      attrs: true,
+      inlineStyle: true,
+      displayName: true,
+      shouldForwardProp: true,
+      styledComponentId: true,
+      target: true,
+      withComponent: true,
+    });
+
+    return WrappedStyledComponent;
   };
 
   return createStyledNativeComponent;

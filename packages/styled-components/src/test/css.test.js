@@ -1,8 +1,11 @@
 // @flow
 import React from 'react';
 import TestRenderer from 'react-test-renderer';
+import { getRenderedCSS, resetStyled } from './utils';
 
-import { resetStyled, expectCSSMatches } from './utils';
+// Disable isStaticRules optimisation since we're not
+// testing for ComponentStyle specifics here
+jest.mock('../utils/isStaticRules', () => () => false);
 
 let styled;
 
@@ -16,7 +19,12 @@ describe('css features', () => {
       transition: opacity 0.3s;
     `;
     TestRenderer.create(<Comp />);
-    expectCSSMatches('.b { -webkit-transition:opacity 0.3s; transition:opacity 0.3s; }');
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      ".b {
+        -webkit-transition: opacity 0.3s;
+        transition: opacity 0.3s;
+      }"
+    `);
   });
 
   it('should add vendor prefixes for display', () => {
@@ -26,10 +34,20 @@ describe('css features', () => {
       align-items: center;
     `;
     TestRenderer.create(<Comp />);
-    expectCSSMatches(`
-      .b {
-        display:-webkit-box; display:-webkit-flex; display:-ms-flexbox; display:flex; -webkit-flex-direction:column; -ms-flex-direction:column; flex-direction:column; -webkit-align-items:center; -webkit-box-align:center; -ms-flex-align:center; align-items:center;
-      }
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      ".b {
+        display: -webkit-box;
+        display: -webkit-flex;
+        display: -ms-flexbox;
+        display: flex;
+        -webkit-flex-direction: column;
+        -ms-flex-direction: column;
+        flex-direction: column;
+        -webkit-align-items: center;
+        -webkit-box-align: center;
+        -ms-flex-align: center;
+        align-items: center;
+      }"
     `);
   });
 
@@ -42,14 +60,14 @@ describe('css features', () => {
       }
     `;
     TestRenderer.create(<Comp />);
-    expectCSSMatches(`
-      @media (min-width: 10px) {
-        @media (min-height: 20px) {
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      "@media (min-width:10px) {
+        @media (min-height:20px) {
           .b {
             color: red;
           }
         }
-      }
+      }"
     `);
   });
 
@@ -58,6 +76,10 @@ describe('css features', () => {
       --custom-prop: some-val;
     `;
     TestRenderer.create(<Comp />);
-    expectCSSMatches('.b { --custom-prop:some-val; }');
+    expect(getRenderedCSS()).toMatchInlineSnapshot(`
+      ".b {
+        --custom-prop: some-val;
+      }"
+    `);
   });
 });

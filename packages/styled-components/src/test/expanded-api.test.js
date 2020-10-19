@@ -1,8 +1,11 @@
 // @flow
 import React from 'react';
 import TestRenderer from 'react-test-renderer';
+import { getRenderedCSS, resetStyled } from './utils';
 
-import { getCSS, resetStyled } from './utils';
+// Disable isStaticRules optimisation since we're not
+// testing for ComponentStyle specifics here
+jest.mock('../utils/isStaticRules', () => () => false);
 
 let styled;
 
@@ -114,23 +117,27 @@ describe('expanded api', () => {
     });
 
     it('changes the rendered element type when used with attrs', () => {
-      const Comp = styled.div.attrs({
+      const Comp = styled.div.attrs(() => ({
         as: 'header',
-      })`
+      }))`
         color: red;
       `;
 
       expect(TestRenderer.create(<Comp />).toJSON()).toMatchSnapshot();
     });
 
-    it('prefers prop over attrs', () => {
-      const Comp = styled.div.attrs({
+    it('prefers attrs over props', () => {
+      const Comp = styled.div.attrs(() => ({
         as: 'header',
-      })`
+      }))`
         color: red;
       `;
 
-      expect(TestRenderer.create(<Comp as="span" />).toJSON()).toMatchSnapshot();
+      expect(TestRenderer.create(<Comp as="span" />).toJSON()).toMatchInlineSnapshot(`
+        <header
+          className="sc-a b"
+        />
+      `);
     });
 
     it('works with custom components', () => {
@@ -156,14 +163,37 @@ describe('expanded api', () => {
         text-align: center;
       `;
 
-      expect(Comp.displayName).toMatchSnapshot();
-      expect(Comp2.displayName).toMatchSnapshot();
-      expect(Comp3.displayName).toMatchSnapshot();
-      expect(TestRenderer.create(<Comp />).toJSON()).toMatchSnapshot();
-      expect(TestRenderer.create(<Comp2 />).toJSON()).toMatchSnapshot();
-      expect(TestRenderer.create(<Comp3 as="span" />).toJSON()).toMatchSnapshot();
+      expect(Comp.displayName).toMatchInlineSnapshot(`"styled.div"`);
+      expect(Comp2.displayName).toMatchInlineSnapshot(`"Styled(styled.div)"`);
+      expect(Comp3.displayName).toMatchInlineSnapshot(`"Styled(Styled(styled.div))"`);
+      expect(TestRenderer.create(<Comp />).toJSON()).toMatchInlineSnapshot(`
+        <div
+          className="sc-a d"
+        />
+      `);
+      expect(TestRenderer.create(<Comp2 />).toJSON()).toMatchInlineSnapshot(`
+        <div
+          className="sc-a sc-b d e"
+        />
+      `);
+      expect(TestRenderer.create(<Comp3 as="span" />).toJSON()).toMatchInlineSnapshot(`
+        <span
+          className="sc-a sc-b sc-c d e f"
+        />
+      `);
 
-      expect(getCSS(document)).toMatchSnapshot();
+      expect(getRenderedCSS()).toMatchInlineSnapshot(`
+        ".d {
+          background: blue;
+          color: red;
+        }
+        .e {
+          color: green;
+        }
+        .f {
+          text-align: center;
+        }"
+      `);
     });
   });
 });

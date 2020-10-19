@@ -1,122 +1,84 @@
 // @flow
-import React from 'react';
-import { IS_BROWSER, STATIC_EXECUTION_CONTEXT } from '../constants';
+import React, { useContext, useLayoutEffect, useRef } from 'react';
+import { STATIC_EXECUTION_CONTEXT } from '../constants';
 import GlobalStyle from '../models/GlobalStyle';
-import StyleSheet from '../models/StyleSheet';
-import { StyleSheetConsumer } from '../models/StyleSheetManager';
+import { useStyleSheet, useStylis } from '../models/StyleSheetManager';
+import { ThemeContext } from '../models/ThemeProvider';
+import type { Interpolation } from '../types';
+import { checkDynamicCreation } from '../utils/checkDynamicCreation';
 import determineTheme from '../utils/determineTheme';
-import { ThemeConsumer, type Theme } from '../models/ThemeProvider';
-// $FlowFixMe
-import hashStr from '../vendor/glamor/hash';
+import generateComponentId from '../utils/generateComponentId';
 import css from './css';
 
-import type { Interpolation } from '../types';
+declare var __SERVER__: boolean;
 
 type GlobalStyleComponentPropsType = Object;
-
-// place our cache into shared context so it'll persist between HMRs
-if (IS_BROWSER) {
-  window.scCGSHMRCache = {};
-}
 
 export default function createGlobalStyle(
   strings: Array<string>,
   ...interpolations: Array<Interpolation>
 ) {
   const rules = css(strings, ...interpolations);
-  const id = `sc-global-${hashStr(JSON.stringify(rules))}`;
-  const style = new GlobalStyle(rules, id);
+  const styledComponentId = `sc-global-${generateComponentId(JSON.stringify(rules))}`;
+  const globalStyle = new GlobalStyle(rules, styledComponentId);
 
-  class GlobalStyleComponent extends React.Component<GlobalStyleComponentPropsType, *> {
-    styleSheet: Object;
+  if (process.env.NODE_ENV !== 'production') {
+    checkDynamicCreation(styledComponentId);
+  }
 
-    static globalStyle = style;
+  function GlobalStyleComponent(props: GlobalStyleComponentPropsType) {
+    const styleSheet = useStyleSheet();
+    const stylis = useStylis();
+    const theme = useContext(ThemeContext);
+    const instanceRef = useRef(styleSheet.allocateGSInstance(styledComponentId));
 
-    static styledComponentId = id;
+    const instance = instanceRef.current;
 
-    constructor(props: GlobalStyleComponentPropsType) {
-      super(props);
-
-      const { globalStyle, styledComponentId } = this.constructor;
-
-      if (IS_BROWSER) {
-        window.scCGSHMRCache[styledComponentId] =
-          (window.scCGSHMRCache[styledComponentId] || 0) + 1;
-      }
-
-      /**
-       * This fixes HMR compatibility. Don't ask me why, but this combination of
-       * caching the closure variables via statics and then persisting the statics in
-       * state works across HMR where no other combination did. ¯\_(ツ)_/¯
-       */
-      this.state = {
-        globalStyle,
-        styledComponentId,
-      };
-    }
-
-    componentWillUnmount() {
-      if (window.scCGSHMRCache[this.state.styledComponentId]) {
-        window.scCGSHMRCache[this.state.styledComponentId] -= 1;
-      }
-      /**
-       * Depending on the order "render" is called this can cause the styles to be lost
-       * until the next render pass of the remaining instance, which may
-       * not be immediate.
-       */
-      if (window.scCGSHMRCache[this.state.styledComponentId] === 0) {
-        this.state.globalStyle.removeStyles(this.styleSheet);
-      }
-    }
-
-    render() {
-      if (process.env.NODE_ENV !== 'production' && React.Children.count(this.props.children)) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `The global style component ${
-            this.state.styledComponentId
-          } was given child JSX. createGlobalStyle does not render children.`
-        );
-      }
-
-      return (
-        <StyleSheetConsumer>
-          {(styleSheet?: StyleSheet) => {
-            this.styleSheet = styleSheet || StyleSheet.master;
-
-            const { globalStyle } = this.state;
-
-            if (globalStyle.isStatic) {
-              globalStyle.renderStyles(STATIC_EXECUTION_CONTEXT, this.styleSheet);
-
-              return null;
-            } else {
-              return (
-                <ThemeConsumer>
-                  {(theme?: Theme) => {
-                    // $FlowFixMe
-                    const { defaultProps } = this.constructor;
-
-                    const context = {
-                      ...this.props,
-                    };
-
-                    if (typeof theme !== 'undefined') {
-                      context.theme = determineTheme(this.props, theme, defaultProps);
-                    }
-
-                    globalStyle.renderStyles(context, this.styleSheet);
-
-                    return null;
-                  }}
-                </ThemeConsumer>
-              );
-            }
-          }}
-        </StyleSheetConsumer>
+    if (process.env.NODE_ENV !== 'production' && React.Children.count(props.children)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `The global style component ${styledComponentId} was given child JSX. createGlobalStyle does not render children.`
       );
+    }
+
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      rules.some(rule => typeof rule === 'string' && rule.indexOf('@import') !== -1)
+    ) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Please do not use @import CSS syntax in createGlobalStyle at this time, as the CSSOM APIs we use in production do not handle it well. Instead, we recommend using a library such as react-helmet to inject a typical <link> meta tag to the stylesheet, or simply embedding it manually in your index.html <head> section for a simpler app.`
+      );
+    }
+
+    if (__SERVER__) {
+      renderStyles(instance, props, styleSheet, theme, stylis);
+    } else {
+      // this conditional is fine because it is compiled away for the relevant builds during minification,
+      // resulting in a single unguarded hook call
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      useLayoutEffect(() => {
+        renderStyles(instance, props, styleSheet, theme, stylis);
+        return () => globalStyle.removeStyles(instance, styleSheet);
+      }, [instance, props, styleSheet, theme, stylis]);
+    }
+
+    return null;
+  }
+
+  function renderStyles(instance, props, styleSheet, theme, stylis) {
+    if (globalStyle.isStatic) {
+      globalStyle.renderStyles(instance, STATIC_EXECUTION_CONTEXT, styleSheet, stylis);
+    } else {
+      const context = {
+        ...props,
+        theme: determineTheme(props, theme, GlobalStyleComponent.defaultProps),
+      };
+
+      globalStyle.renderStyles(instance, context, styleSheet, stylis);
     }
   }
 
-  return GlobalStyleComponent;
+  // $FlowFixMe
+  return React.memo(GlobalStyleComponent);
 }

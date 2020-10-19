@@ -63,8 +63,31 @@ _This error was replaced with a dev-time warning, it will be deleted for v4 fina
 
 ## 12
 
-It seems you are interpolating a keyframe declaration (%s) into an untagged string. This was supported in styled-components v3, but is not longer supported in v4 as keyframes are now injected on-demand. Please wrap your string in the css\`\` helper (see https://www.styled-components.com/docs/api#css), which ensures the styles are injected correctly.
+It seems you are interpolating a keyframe declaration (%s) into an untagged string. This was supported in styled-components v3, but is not longer supported in v4 as keyframes are now injected on-demand. Please wrap your string in the css\`\` helper which ensures the styles are injected correctly. See https://www.styled-components.com/docs/api#css
 
 ## 13
 
 %s is not a styled component and cannot be referred to via component selector. See https://www.styled-components.com/docs/advanced#referring-to-other-components for more details.
+
+## 14
+
+ThemeProvider: "theme" prop is required.
+
+## 15
+
+A stylis plugin has been supplied that is not named. We need a name for each plugin to be able to prevent styling collisions between different stylis configurations within the same app. Before you pass your plugin to `<StyleSheetManager stylisPlugins={[]}>`, please make sure each plugin is uniquely-named, e.g.
+
+```js
+Object.defineProperty(importedPlugin, 'name', { value: 'some-unique-name' });
+```
+
+## 16
+
+Reached the limit of how many styled components may be created at group %s.
+You may only create up to 1,073,741,824 components. If you're creating components dynamically,
+as for instance in your render method then you may be running into this limitation.
+
+## 17
+
+CSSStyleSheet could not be found on HTMLStyleElement.
+Has styled-components' style tag been unmounted or altered by another script?

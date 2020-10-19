@@ -1,5 +1,5 @@
 // @flow
-import 'react-native';
+/* eslint-disable no-console */
 import { Text, View } from 'react-native';
 import React from 'react';
 import TestRenderer from 'react-test-renderer';
@@ -77,6 +77,43 @@ describe('native', () => {
     expect(view.props.style).toEqual([{ color: 'red', textAlign: 'left' }]);
   });
 
+  it('folds defaultProps', () => {
+    const Inner = styled.View``;
+
+    Inner.defaultProps = {
+      theme: {
+        fontSize: 12,
+      },
+      style: {
+        background: 'blue',
+        textAlign: 'center',
+      },
+    };
+
+    const Outer = styled(Inner)``;
+
+    Outer.defaultProps = {
+      theme: {
+        fontSize: 16,
+      },
+      style: {
+        background: 'silver',
+      },
+    };
+
+    expect(Outer.defaultProps).toMatchInlineSnapshot(`
+Object {
+  "style": Object {
+    "background": "silver",
+    "textAlign": "center",
+  },
+  "theme": Object {
+    "fontSize": 16,
+  },
+}
+`);
+  });
+
   it('should combine inline styles and the style prop', () => {
     const Comp = styled.View`
       padding-top: 10;
@@ -93,6 +130,7 @@ describe('native', () => {
     const oldConsoleWarn = console.warn;
     console.warn = jest.fn();
     try {
+      // eslint-disable-next-line no-unused-expressions
       styled.View`
         /* this is a comment */
       `;
@@ -119,11 +157,23 @@ describe('native', () => {
     expect(wrapper.root.findByType('View').props.style).toEqual([{ paddingTop: 5, opacity: 0.9 }]);
   });
 
+  it('should forward the "as" prop if "forwardedAs" is used', () => {
+    const Comp = ({ as: Component = View, ...props }) => <Component {...props} />;
+
+    const Comp2 = styled(Comp)`
+      background: red;
+    `;
+
+    const wrapper = TestRenderer.create(<Comp2 forwardedAs={Text} />);
+
+    expect(wrapper.root.findByType('Text')).not.toBeUndefined();
+  });
+
   describe('attrs', () => {
     beforeEach(() => jest.spyOn(console, 'warn').mockImplementation(() => {}));
 
     it('works fine with an empty object', () => {
-      const Comp = styled.View.attrs({})``;
+      const Comp = styled.View.attrs(() => ({}))``;
       const wrapper = TestRenderer.create(<Comp />);
       const view = wrapper.root.findByType('View');
 
@@ -133,9 +183,9 @@ describe('native', () => {
     });
 
     it('passes simple props on', () => {
-      const Comp = styled.View.attrs({
+      const Comp = styled.View.attrs(() => ({
         test: true,
-      })``;
+      }))``;
 
       const wrapper = TestRenderer.create(<Comp />);
       const view = wrapper.root.findByType('View');
@@ -147,9 +197,9 @@ describe('native', () => {
     });
 
     it('calls an attr-function with context', () => {
-      const Comp = styled.View.attrs({
-        copy: props => props.test,
-      })``;
+      const Comp = styled.View.attrs(p => ({
+        copy: p.test,
+      }))``;
 
       const test = 'Put that cookie down!';
       const wrapper = TestRenderer.create(<Comp test={test} />);
@@ -163,13 +213,13 @@ describe('native', () => {
     });
 
     it('merges multiple calls', () => {
-      const Comp = styled.View.attrs({
+      const Comp = styled.View.attrs(() => ({
         first: 'first',
         test: '_',
-      }).attrs({
+      })).attrs(() => ({
         second: 'second',
         test: 'test',
-      })``;
+      }))``;
 
       const wrapper = TestRenderer.create(<Comp />);
       const view = wrapper.root.findByType('View');
@@ -203,13 +253,13 @@ describe('native', () => {
     });
 
     it('merges attrs when inheriting SC', () => {
-      const Parent = styled.View.attrs({
+      const Parent = styled.View.attrs(() => ({
         first: 'first',
-      })``;
+      }))``;
 
-      const Child = styled(Parent).attrs({
+      const Child = styled(Parent).attrs(() => ({
         second: 'second',
-      })``;
+      }))``;
 
       const wrapper = TestRenderer.create(<Child />);
       const view = wrapper.root.findByType('View');
@@ -222,9 +272,9 @@ describe('native', () => {
     });
 
     it('should pass through children as a normal prop', () => {
-      const Comp = styled.Text.attrs({
+      const Comp = styled.Text.attrs(() => ({
         children: 'Probably a bad idea',
-      })``;
+      }))``;
 
       const wrapper = TestRenderer.create(<Comp />);
       const text = wrapper.root.findByType('Text');
@@ -236,43 +286,46 @@ describe('native', () => {
     });
 
     it('should pass through complex children as well', () => {
-      const Comp = styled.Text.attrs({
-        children: <Text>Probably a bad idea</Text>,
-      })``;
+      const child = <Text>Probably a bad idea</Text>;
+      const Comp = styled.Text.attrs(() => ({
+        children: child,
+      }))``;
 
       const wrapper = TestRenderer.create(<Comp />);
       const text = wrapper.root.findByType('Text');
 
       expect(text.props).toMatchObject({
-        children: <Text>Probably a bad idea</Text>,
+        children: child,
         style: [{}],
       });
     });
 
     it('should override children', () => {
-      const Comp = styled.Text.attrs({
-        children: <Text>Amazing</Text>,
-      })``;
-
-      const wrapper = TestRenderer.create(<Comp>Something else</Comp>);
-      const text = wrapper.root.findByType('Text');
-
-      expect(text.props).toMatchObject({
-        children: 'Something else',
-        style: [{}],
-      });
-    });
-
-    it('accepts a function', () => {
-      const Comp = styled.Text.attrs(props => ({
-        children: <Text>Amazing</Text>,
+      const child = <Text>Amazing</Text>;
+      const Comp = styled.Text.attrs(() => ({
+        children: child,
       }))``;
 
       const wrapper = TestRenderer.create(<Comp>Something else</Comp>);
       const text = wrapper.root.findByType('Text');
 
       expect(text.props).toMatchObject({
-        children: 'Something else',
+        children: child,
+        style: [{}],
+      });
+    });
+
+    it('accepts a function', () => {
+      const child = <Text>Amazing</Text>;
+      const Comp = styled.Text.attrs(() => ({
+        children: child,
+      }))``;
+
+      const wrapper = TestRenderer.create(<Comp>Something else</Comp>);
+      const text = wrapper.root.findByType('Text');
+
+      expect(text.props).toMatchObject({
+        children: child,
         style: [{}],
       });
     });
@@ -294,6 +347,29 @@ describe('native', () => {
         'data-color': 'red',
         style: [{}],
       });
+    });
+
+    it('theme prop works', () => {
+      const Comp = styled.Text`
+        color: ${({ theme }) => theme.myColor};
+      `;
+
+      const wrapper = TestRenderer.create(<Comp theme={{ myColor: 'red' }}>Something else</Comp>);
+      const text = wrapper.root.findByType('Text');
+
+      expect(text.props.style).toMatchObject([{ color: 'red' }]);
+    });
+
+    it('theme in defaultProps works', () => {
+      const Comp = styled.Text`
+        color: ${({ theme }) => theme.myColor};
+      `;
+      Comp.defaultProps = { theme: { myColor: 'red' } };
+
+      const wrapper = TestRenderer.create(<Comp>Something else</Comp>);
+      const text = wrapper.root.findByType('Text');
+
+      expect(text.props.style).toMatchObject([{ color: 'red' }]);
     });
   });
 
@@ -347,49 +423,113 @@ describe('native', () => {
       expect(view.props).toHaveProperty('foo');
       expect(view.props.style).toEqual([{ color: 'red' }]);
     });
-  });
 
-  describe('warnings', () => {
-    beforeEach(() => {
-      jest.spyOn(console, 'warn').mockImplementation(() => {});
+    it('should omit transient props', () => {
+      const Comp = styled.Text`
+        color: ${p => p.$color};
+      `;
+
+      expect(TestRenderer.create(<Comp $color="red" />).toJSON()).toMatchSnapshot();
     });
 
-    afterEach(() => {
-      console.warn.mockClear();
+    it('allows for custom prop filtering for elements', () => {
+      const Comp = styled('View').withConfig({
+        shouldForwardProp: prop => !['filterThis'].includes(prop)
+      })`
+      color: red;
+    `;
+      const wrapper = TestRenderer.create(<Comp filterThis="abc" passThru="def" />);
+      const { props } = wrapper.root.findByType('View');
+      expect(props.style).toEqual([{ color: 'red' }]);
+      expect(props.passThru).toBe('def');
+      expect(props.filterThis).toBeUndefined();
     });
 
-    it('warns upon use of the removed "innerRef" prop', () => {
-      const Comp = styled.View``;
-      const ref = React.createRef();
-
-      TestRenderer.create(<Comp innerRef={ref} />);
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('The "innerRef" API has been removed')
-      );
+    it('allows custom prop filtering for components', () => {
+      const InnerComp = props => <View {...props} />
+      const Comp = styled(InnerComp).withConfig({
+        shouldForwardProp: prop => !['filterThis'].includes(prop)
+      })`
+        color: red;
+      `;
+      const wrapper = TestRenderer.create(<Comp filterThis="abc" passThru="def" />);
+      const { props } = wrapper.root.findByType('View');
+      expect(props.style).toEqual([{ color: 'red' }]);
+      expect(props.passThru).toBe('def');
+      expect(props.filterThis).toBeUndefined();
     });
 
-    it('warns upon use of a Stateless Functional Component as a prop for attrs', () => {
-      const Inner = () => <Text />;
-      const Comp = styled.Text.attrs({ component: Inner })``;
-
-      TestRenderer.create(<Comp />);
-
-      expect(console.warn.mock.calls[1][0]).toMatchInlineSnapshot(`
-"It looks like you've used a non styled-component as the value for the \\"component\\" prop in an object-form attrs constructor of \\"Styled(Component)\\".
-You should use the new function-form attrs constructor which avoids this issue: attrs(props => ({ yourStuff }))
-To continue using the deprecated object syntax, you'll need to wrap your component prop in a function to make it available inside the styled component (you'll still get the deprecation warning though.)
-For example, { component: () => InnerComponent } instead of { component: InnerComponent }"
-`);
+    it('composes shouldForwardProp on composed styled components', () => {
+      const StyledView = styled.View.withConfig({
+        shouldForwardProp: prop => prop === 'passThru'
+      })`
+        color: red;
+      `;
+      const ComposedView = styled(StyledView).withConfig({
+        shouldForwardProp: () => true
+      })``;
+      const wrapper = TestRenderer.create(<ComposedView filterThis passThru />);
+      const { props } = wrapper.root.findByType('View');
+      expect(props.passThru).toBeDefined();
+      expect(props.filterThis).toBeUndefined();
     });
 
-    it('warns for using fns as attrs object keys', () => {
-      const Comp = styled.View.attrs({ 'data-text-color': props => props.textColor })``;
+    it('should filter out props when using "as" to a custom component', () => {
+      const AsComp = props => <View {...props} />
+      const Comp = styled.View.withConfig({
+        shouldForwardProp: prop => !['filterThis'].includes(prop)
+      })`
+        color: red;
+      `;
+      const wrapper = TestRenderer.create(<Comp as={AsComp} filterThis="abc" passThru="def" />);
+      const { props } = wrapper.root.findByType(AsComp);
 
-      TestRenderer.create(<Comp textColor="blue" />);
+      expect(props.style).toEqual([{ color: 'red' }]);
+      expect(props.passThru).toBe('def');
+      expect(props.filterThis).toBeUndefined();
+    });
 
-      expect(console.warn.mock.calls[0][0]).toMatchInlineSnapshot(
-        `"Functions as object-form attrs({}) keys are now deprecated and will be removed in a future version of styled-components. Switch to the new attrs(props => ({})) syntax instead for easier and more powerful composition. The attrs key in question is \\"data-text-color\\" on component \\"Styled(View)\\"."`
-      );
+    it('can set computed styles based on props that are being filtered out', () => {
+      const AsComp = props => <View {...props} />
+      const Comp = styled.View.withConfig({
+        shouldForwardProp: prop => !['filterThis'].includes(prop)
+      })`
+        color: ${props => props.filterThis === 'abc' ? 'red' : undefined};
+      `;
+      const wrapper = TestRenderer.create(<Comp as={AsComp} filterThis="abc" passThru="def" />);
+      const { props } = wrapper.root.findByType(AsComp);
+
+      expect(props.style).toEqual([{ color: 'red' }]);
+      expect(props.passThru).toBe('def');
+      expect(props.filterThis).toBeUndefined();
+    });
+
+    it('should filter our props when using "as" to a different element', () => {
+      const Comp = styled.View.withConfig({
+        shouldForwardProp: prop => !['filterThis'].includes(prop)
+      })`
+        color: red;
+      `;
+      const wrapper = TestRenderer.create(<Comp as="a" filterThis="abc" passThru="def" />);
+      const { props } = wrapper.root.findByType("a");
+
+      expect(props.style).toEqual([{ color: 'red' }]);
+      expect(props.passThru).toBe('def');
+      expect(props.filterThis).toBeUndefined();
+    });
+
+    it('should prefer transient $as over as', () => {
+      const OtherText = props => <Text {...props} foo />;
+
+      const Comp = styled.Text`
+        color: red;
+      `;
+
+      const wrapper = TestRenderer.create(<Comp $as="View" as={OtherText} />);
+      const view = wrapper.root.findByType('View');
+
+      expect(view.props.style).toEqual([{ color: 'red' }]);
+      expect(() => wrapper.root.findByType('Text')).toThrowError();
     });
   });
 });

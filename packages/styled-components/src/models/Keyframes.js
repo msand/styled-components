@@ -1,32 +1,39 @@
 // @flow
-import StyleSheet from './StyleSheet';
-import StyledError from '../utils/error';
+import StyleSheet from '../sheet';
+import { type Stringifier } from '../types';
+import throwStyledError from '../utils/error';
+import { masterStylis } from './StyleSheetManager';
 
 export default class Keyframes {
   id: string;
 
   name: string;
 
-  rules: Array<string>;
+  rules: string;
 
-  constructor(name: string, rules: Array<string>) {
+  constructor(name: string, rules: string) {
     this.name = name;
-    this.rules = rules;
-
     this.id = `sc-keyframes-${name}`;
+    this.rules = rules;
   }
 
-  inject = (styleSheet: StyleSheet) => {
-    if (!styleSheet.hasNameForId(this.id, this.name)) {
-      styleSheet.inject(this.id, this.rules, this.name);
+  inject = (styleSheet: StyleSheet, stylisInstance: Stringifier = masterStylis) => {
+    const resolvedName = this.name + stylisInstance.hash;
+
+    if (!styleSheet.hasNameForId(this.id, resolvedName)) {
+      styleSheet.insertRules(
+        this.id,
+        resolvedName,
+        stylisInstance(this.rules, resolvedName, '@keyframes')
+      );
     }
   };
 
   toString = () => {
-    throw new StyledError(12, String(this.name));
+    return throwStyledError(12, String(this.name));
   };
 
-  getName() {
-    return this.name;
+  getName(stylisInstance: Stringifier = masterStylis) {
+    return this.name + stylisInstance.hash;
   }
 }
